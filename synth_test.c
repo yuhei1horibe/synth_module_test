@@ -19,13 +19,18 @@
 int synth_test(void* mem_base, unsigned int mem_size)
 {
     static const uint32_t num_units = 32;
-    uint32_t freq = 0;
-    uint32_t amp  = 0;
-    uint32_t wave_type = 0;
-    uint32_t read_data = 0;
+    uint32_t freq        = 0;
+    uint32_t amp         = 0;
+    uint32_t vca_attack  = 0;
+    uint32_t vca_decay   = 0;
+    uint32_t vca_sustain = 0;
+    uint32_t vca_release = 0;
+    uint32_t vca_eg      = 0;
+    uint32_t wave_type   = 0;
+    uint32_t read_data   = 0;
     uint32_t* write_addr = NULL;
-    uint32_t* read_addr = NULL;
-    uint32_t errors = 0;
+    uint32_t* read_addr  = NULL;
+    uint32_t errors      = 0;
 
     //uint32_t i;
     uint32_t j;
@@ -36,27 +41,47 @@ int synth_test(void* mem_base, unsigned int mem_size)
 
     // Generate and write operands
     for (j = 0; j < num_units; j++) {
-        if (j == 16) {
-            amp = 0x100;
-            wave_type = 1;
-        } else {
-            amp = 0;
-            wave_type = 0;
-        }
+        // VCO
+        wave_type = j % 3;
         freq = 2;
 
+        // VCA
+        vca_attack  = j % 4;
+        vca_decay   = j % 4;
+        vca_sustain = 0x80;
+        vca_release = j % 4;
+        vca_eg      = (vca_release << 24) |
+                      (vca_sustain << 16) |
+                      (vca_decay   << 8)  |
+                      vca_attack;
+
+        amp = 0x100;
+
         printf("Writing(unit%u): %u[Hz] and %0.2f\n", j, freq, (float)amp/256);
+        printf("A: %u, D: %u, S: %u, R: %u\n", vca_attack, vca_decay, vca_sustain, vca_release);
 
         // Write to the register
-        write_addr        = (uint32_t*)(mem_base + sizeof(uint32_t) * 2 * j);
+        write_addr        = (uint32_t*)(mem_base + sizeof(uint32_t) * 3 * j);
         *write_addr       = (amp << 16) | freq;
         *(write_addr + 1) = wave_type;
+        *(write_addr + 2) = vca_eg;
     }
     usleep(100);
-    for (j = 0; j < num_units * 2; j++) {
+    for (j = 0; j < num_units * 3; j++) {
         read_addr = (uint32_t*)(mem_base + sizeof(uint32_t) * j);
         read_data = *read_addr;
         printf("Data read(%x): %x\n", (uint32_t)read_addr, read_data);
+    }
+
+    // Trigger
+    for (j = 0; j < num_units; j++) {
+        write_addr = (uint32_t*)(mem_base + sizeof(uint32_t) * 3 * j);
+        printf("Unit%u on\n", j);
+        *(write_addr + 1) |= 0x4;
+        sleep(2);
+        printf("Unit%u off\n", j);
+        *(write_addr + 1) &= ~0x4;
+        sleep(2);
     }
     return 0;
 }

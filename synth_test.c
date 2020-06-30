@@ -10,10 +10,87 @@
 #include <stdint.h>
 #include <time.h>
 
+// ALSA
+#include <alsa/asoundlib.h>
+
 //#define DEBUG
 
 #define UIO_DEV_PATH "/sys/class/uio/"
 #define DEVNAME_MAX 128
+
+// Configure PCM device
+int config_pcm(snd_pcm_t* handle)
+{
+	snd_pcm_hw_params_t *params = NULL;
+    char pcm_name[]   = "default";
+    const snd_pcm_stream_t stream = SND_PCM_STREAM_PLAYBACK;
+    int open_mode = SND_PCM_NONBLOCK;
+    int sample_rate = 48000;
+    int channels = 2;
+    int err = 0;
+    // Allocate hardware parameters
+	snd_pcm_hw_params_alloca(&params);
+
+    if (params == NULL) {
+        printf("Failed to allocate PCM hardware params.\n");
+        return -1;
+    }
+
+    // Open PCM
+    err = snd_pcm_open(&handle, pcm_name, stream, open_mode);
+    if (err < 0) {
+        printf("Failed to open PCM device\n");
+        goto snd_config_err;
+    }
+    printf("PCM device opened.\n");
+
+	err = snd_pcm_hw_params_any(handle, params);
+	if (err < 0) {
+        printf("Failed to get hardware params.\n");
+        goto snd_config_err;
+	}
+
+    err = snd_pcm_nonblock(handle, 1);
+    if (err) {
+        printf("Failed to set up non-blocking.\n");
+        goto snd_config_err;
+    }
+
+    // Format
+	err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S24_LE);
+	if (err < 0) {
+        printf("Failed to set hw_params\n");
+        goto snd_config_err;
+	}
+
+    // Channels
+	err = snd_pcm_hw_params_set_channels(handle, params, channels);
+	if (err < 0) {
+        printf("Failed to setup stereo output.\n");
+        goto snd_config_err;
+	}
+
+    // Sample rate
+	err = snd_pcm_hw_params_set_rate_near(handle, params, &sample_rate, 0);
+    if (err < 0) {
+        printf("Failed to set sampling rate to 48kHz\n");
+        goto snd_config_err;
+    }
+
+    // Setting hardware parameters
+	err = snd_pcm_hw_params(handle, params);
+    if (err < 0) {
+        printf("Failed to install hardware parameters.\n");
+        goto snd_config_err;
+    }
+    printf("Hardware parameters are installed.\n");
+
+    return 0;
+
+snd_config_err:
+    snd_pcm_close(handle);
+    return -1;
+}
 
 // Synthesizer module test
 int synth_test(void* mem_base, unsigned int mem_size)
@@ -33,18 +110,26 @@ int synth_test(void* mem_base, unsigned int mem_size)
     uint32_t* read_addr  = NULL;
     uint32_t errors      = 0;
 
+    // PCM handle
+    snd_pcm_t* handle = NULL;
+
     //uint32_t i;
     uint32_t j;
 
     //srand((unsigned)time(NULL));
+    printf("Configuring sound PCM device.\n");
+    if (config_pcm(handle) < 0) {
+        printf("Failed to configure sound PCM device.\n");
+        return -1;
+    }
 
-    printf("TDM multiplier test started.\n");
+    printf("Synthesizer test\n");
 
     // Generate and write operands
     for (j = 0; j < num_units; j++) {
         // VCO
         wave_type = j % 3;
-        freq = 220;
+        freq = 220 * ((j % 3) + 1);
 
         // VCA
         vca_attack  = j % num_addr_per_unit;
@@ -56,7 +141,7 @@ int synth_test(void* mem_base, unsigned int mem_size)
                       (vca_decay   << 8)  |
                       vca_attack;
 
-        amp = 0x01000100;
+        amp = 0x00400000;
 
         printf("Writing(unit%u): %u[Hz] and %0.2f\n", j, freq, (float)amp/256);
         printf("A: %u, D: %u, S: %u, R: %u\n", vca_attack, vca_decay, vca_sustain, vca_release);
@@ -83,7 +168,11 @@ int synth_test(void* mem_base, unsigned int mem_size)
         sleep(2);
         printf("Unit%u off\n", j);
         *(write_addr + 1) &= ~0x4;
-        sleep(2);
+        sleep(1);
+    }
+
+    if (handle) {
+        snd_pcm_close(handle);
     }
     return 0;
 }

@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <stdint.h>
 #include <time.h>
+#include <math.h>
 
 // ALSA
 #include <alsa/asoundlib.h>
@@ -128,14 +129,36 @@ int synth_test(void* mem_base, unsigned int mem_size)
     // Generate and write operands
     for (j = 0; j < num_units; j++) {
         // VCO
-        wave_type = j % 3;
-        freq = 220 * ((j % 3) + 1);
+        wave_type = (j / 7) % 3;
+        switch (j % 7) {
+        case 0:
+            freq = 440 * pow(2, ((double)-9/12));
+            break;
+        case 1:
+            freq = 440 * pow(2, ((double)-7/12));
+            break;
+        case 2:
+            freq = 440 * pow(2, ((double)-5/12));
+            break;
+        case 3:
+            freq = 440 * pow(2, ((double)-4/12));
+            break;
+        case 4:
+            freq = 440 * pow(2, ((double)-2/12));
+            break;
+        case 5:
+            freq = 440;
+            break;
+        case 6:
+            freq = 440 * pow(2, ((double)2/12));
+            break;
+        }
 
         // VCA
-        vca_attack  = j % num_addr_per_unit;
-        vca_decay   = j % num_addr_per_unit;
-        vca_sustain = 0x80;
-        vca_release = j % num_addr_per_unit;
+        vca_attack  = j % 7 * 0x10;
+        vca_decay   = j % 7;
+        vca_sustain = 0x20;
+        vca_release = j % 7;
         vca_eg      = (vca_release << 24) |
                       (vca_sustain << 16) |
                       (vca_decay   << 8)  |
@@ -286,7 +309,7 @@ int main(int argc, char *argv[])
     unsigned int mem_size   = 0;
     unsigned int mem_offset = 0;
 
-    if (find_uio_dev("zed_uio_module", dev_dir, DEVNAME_MAX) == true) {
+    if (find_uio_dev("zed-pl-snd-card", dev_dir, DEVNAME_MAX) == true) {
         printf("Device found in %s\n", dev_dir);
 
         strncpy(dev_map_dir, dev_dir, DEVNAME_MAX);

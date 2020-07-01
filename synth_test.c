@@ -155,10 +155,14 @@ int synth_test(void* mem_base, unsigned int mem_size)
         }
 
         // VCA
-        vca_attack  = j % 7 * 0x10;
-        vca_decay   = j % 7;
-        vca_sustain = 0x20;
-        vca_release = j % 7;
+        //vca_attack  = (j % 7) * 0x10;
+        vca_attack  = 0x80;
+        //vca_decay   = j % 7;
+        vca_decay   = 8;
+        //vca_sustain = 0x30 - (j % 7) * 0x20 / 6;
+        vca_sustain = 0x40;
+        //vca_release = j % 7;
+        vca_release = 0x01;
         vca_eg      = (vca_release << 24) |
                       (vca_sustain << 16) |
                       (vca_decay   << 8)  |
@@ -188,9 +192,13 @@ int synth_test(void* mem_base, unsigned int mem_size)
         write_addr = (uint32_t*)(mem_base + sizeof(uint32_t) * num_addr_per_unit * j);
         printf("Unit%u on\n", j);
         *(write_addr + 1) |= 0x4;
+        *(write_addr + 1 + num_addr_per_unit * 2) |= 0x4;
+        *(write_addr + 1 + num_addr_per_unit * 4) |= 0x4;
         sleep(2);
         printf("Unit%u off\n", j);
         *(write_addr + 1) &= ~0x4;
+        *(write_addr + 1 + num_addr_per_unit * 2) &= ~0x4;
+        *(write_addr + 1 + num_addr_per_unit * 4) &= ~0x4;
         sleep(1);
     }
 
